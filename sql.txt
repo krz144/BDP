@@ -1,0 +1,301 @@
+-- CREATE DATABASE bdot10k_zestaw_c_311512
+--    WITH 
+--    OWNER = postgres
+--    ENCODING = 'UTF8'
+--    CONNECTION LIMIT = -1;
+
+CREATE SCHEMA bdot10k_311512;
+
+-- CREATE EXTENSION POSTGIS;
+
+
+CREATE TYPE bdot10k_311512.ot_zrodlo_danych AS ENUM('EGiB', 'GESUT', 'PRG', 'ortofotomapa', 'BDOT500', 'mapa zasadnicza', 'mapa topograficzna 10k', 'BDOT10k', 'Centralny Rejestr Form Ochrony Przyrody', 'NMT', 'pomiar terenowy', 'inne');
+CREATE TYPE bdot10k_311512.ot_kat_istnienia AS ENUM('eksploatowany', 'nieczynny', 'w budowie', 'zniszczony');
+CREATE TYPE bdot10k_311512.ot_kat_zarzadzania_drogi AS ENUM('krajowa', 'wojewodzka', 'powiatowa', 'gminna', 'wewnêtrzna');
+CREATE TYPE bdot10k_311512.ot_klasa_drogi AS ENUM('autostrada', 'droga ekspresowa', 'droga g³ówna ruchu przyspieszonego', 'droga g³ówna', 'droga zbiorcza', 'droga lokalna', 'droga dojazdowa', 'droga wewnêtrzna');
+CREATE TYPE bdot10k_311512.ot_material_nawierzchni AS ENUM('beton', 'bruk', 'grunt naturalny', 'kostka kamienna', 'kostka prefabrykowana', 'masa bitumiczna', 'p³yty betonowe', '¿wir', 't³uczeñ', 'inny');
+CREATE TYPE bdot10k_311512.ot_polozenie_obiektu_sieci_transportowej AS ENUM('pod powierzchni¹ gruntu', 'na powierzchni gruntu', 'ponad powierzchni¹ gruntu poziom 1', 'ponad powierzchni¹ gruntu poziom 2', 'ponad powierzchni¹ gruntu poziom 3', 'ponad powierzchni¹ gruntu poziom 4');
+CREATE TYPE bdot10k_311512.ot_rodzaj_rep_geom AS ENUM('linia umowna', 'sztuczny ³¹cznik');
+CREATE TYPE bdot10k_311512.ot_rodzaj_budowli_inzynierskiej AS ENUM('akwedukt', 'estakada', 'k³adka', 'most', 'przejœcie dla zwierz¹t', 'przejœcie podziemne dla pieszych', 'tunel', 'wiadukt');
+CREATE TYPE bdot10k_311512.ot_konstrukcja_budowli_inzynierskiej AS ENUM('ruchoma', 'sta³a');
+
+
+
+
+CREATE TABLE bdot10k_311512.ot_skjz_l (
+	lokalny_id text PRIMARY KEY UNIQUE NOT NULL,
+	przestrzen_nazw text NOT NULL,
+	wersja date NOT NULL,
+	poczatek_wersji_obiektu date NOT NULL,
+	koniec_wersji_obiektu date CHECK(koniec_wersji_obiektu > poczatek_wersji_obiektu),
+	oznaczenie_zmiany text NOT NULL,
+	zrodlo_danych_geom bdot10k_311512.ot_zrodlo_danych NOT NULL,
+	kat_istnienia bdot10k_311512.ot_kat_istnienia,
+	uwagi text,
+	info_dodatkowa text,
+	kod_karto_10k text,
+	kod_karto_250k text,
+	skrot_karto text,
+	
+	kat_zarzadzania bdot10k_311512.ot_kat_zarzadzania_drogi NOT NULL,
+	klasa_drogi bdot10k_311512.ot_klasa_drogi NOT NULL,
+	material_nawierzchni bdot10k_311512.ot_material_nawierzchni NOT NULL,
+	nazwa_drogi text,
+	liczba_jezdni_drogi integer NOT NULL,
+	polozenie bdot10k_311512.ot_polozenie_obiektu_sieci_transportowej NOT NULL,
+	szerokosc_nawierzchni double precision NOT NULL,
+	geom geometry(MULTILINESTRING, 2180) NOT NULL,
+	
+	cecha_geometrii bdot10k_311512.ot_rodzaj_rep_geom,
+	id_ulic text NOT NULL,
+	id_simc text,
+	ulica_cecha text,
+	ulica_nazwa_cz1 text,
+	ulica_nazwa_cz2 text
+);
+
+CREATE TABLE bdot10k_311512.ot_buin_l (
+	lokalny_id text PRIMARY KEY UNIQUE NOT NULL,
+	przestrzen_nazw text NOT NULL,
+	wersja date NOT NULL,
+	poczatek_wersji_obiektu date NOT NULL,
+	koniec_wersji_obiektu date CHECK(koniec_wersji_obiektu > poczatek_wersji_obiektu),
+	oznaczenie_zmiany text NOT NULL,
+	zrodlo_danych_geom bdot10k_311512.ot_zrodlo_danych NOT NULL,
+	kat_istnienia bdot10k_311512.ot_kat_istnienia,
+	uwagi text,
+	info_dodatkowa text,
+	kod_karto_10k text,
+	kod_karto_250k text,
+	skrot_karto text,
+	
+	rodzaj bdot10k_311512.ot_rodzaj_budowli_inzynierskiej NOT NULL,
+	konstrukcja bdot10k_311512.ot_konstrukcja_budowli_inzynierskiej CHECK((rodzaj = 'most') or (konstrukcja is NULL)),
+	nosnosc double precision CHECK(nosnosc > 0),
+	szerokosc double precision CHECK(szerokosc > 0),
+	nazwa text,
+	geom geometry(MULTILINESTRING, 2180) NOT NULL
+);
+
+CREATE TABLE bdot10k_311512.ot_szlak_drogowy (
+	id serial PRIMARY KEY,
+	numer_drogi text NOT NULL
+);
+
+CREATE TABLE bdot10k_311512.int_jezdnia_szlak (
+	id_jezdni text NOT NULL REFERENCES bdot10k_311512.ot_skjz_l(lokalny_id) ON UPDATE NO ACTION ON DELETE NO ACTION,
+	id_szlaku integer NOT NULL REFERENCES bdot10k_311512.ot_szlak_drogowy(id) ON UPDATE NO ACTION ON DELETE NO ACTION,
+	PRIMARY KEY(id_jezdni, id_szlaku)
+);
+
+
+
+
+-- INDEX
+-- indeksy na PK robi¹ siê automatycznie
+
+-- indeksy na geometrii i kluczach obcych
+CREATE INDEX skjzl_geom_idx ON bdot10k_311512.ot_skjz_l USING gist(geom);
+CREATE INDEX buinl_geom_idx ON bdot10k_311512.ot_buin_l USING gist(geom);
+CREATE INDEX int_js_idjezdni_idx ON bdot10k_311512.int_jezdnia_szlak (id_jezdni);
+CREATE INDEX int_js_idszlaku_idx ON bdot10k_311512.int_jezdnia_szlak (id_szlaku);
+
+-- indeksy na kolumnach o stworzonych typach AS ENUM
+CREATE INDEX slownik_skjz_idx1 ON bdot10k_311512.ot_skjz_l(zrodlo_danych_geom);
+CREATE INDEX slownik_skjz_idx2 ON bdot10k_311512.ot_skjz_l(kat_istnienia);
+CREATE INDEX slownik_skjz_idx3 ON bdot10k_311512.ot_skjz_l(kat_zarzadzania);
+CREATE INDEX slownik_skjz_idx4 ON bdot10k_311512.ot_skjz_l(klasa_drogi);
+CREATE INDEX slownik_skjz_idx5 ON bdot10k_311512.ot_skjz_l(material_nawierzchni);
+CREATE INDEX slownik_skjz_idx6 ON bdot10k_311512.ot_skjz_l(polozenie);
+CREATE INDEX slownik_skjz_idx7 ON bdot10k_311512.ot_skjz_l(cecha_geometrii);
+CREATE INDEX slownik_buin_idx1 ON bdot10k_311512.ot_buin_l(zrodlo_danych_geom);
+CREATE INDEX slownik_buin_idx2 ON bdot10k_311512.ot_buin_l(kat_istnienia);
+CREATE INDEX slownik_buin_idx3 ON bdot10k_311512.ot_buin_l(rodzaj);
+CREATE INDEX slownik_buin_idx4 ON bdot10k_311512.ot_buin_l(konstrukcja);
+
+-- indeks na kolumnie z czêsto powtarzaj¹cymi siê wartoœciami typu integer
+CREATE INDEX skjzl_liczba_jezdni_idx ON bdot10k_311512.ot_skjz_l(liczba_jezdni_drogi);
+
+VACUUM ANALYZE bdot10k_311512.ot_skjz_l(geom);
+VACUUM ANALYZE bdot10k_311512.ot_buin_l(geom);
+VACUUM ANALYZE bdot10k_311512.int_jezdnia_szlak(id_jezdni);
+VACUUM ANALYZE bdot10k_311512.int_jezdnia_szlak(id_szlaku);
+VACUUM ANALYZE bdot10k_311512.ot_skjz_l(zrodlo_danych_geom);
+VACUUM ANALYZE bdot10k_311512.ot_skjz_l(kat_istnienia);
+VACUUM ANALYZE bdot10k_311512.ot_skjz_l(kat_zarzadzania);
+VACUUM ANALYZE bdot10k_311512.ot_skjz_l(klasa_drogi);
+VACUUM ANALYZE bdot10k_311512.ot_skjz_l(material_nawierzchni);
+VACUUM ANALYZE bdot10k_311512.ot_skjz_l(polozenie);
+VACUUM ANALYZE bdot10k_311512.ot_skjz_l(cecha_geometrii);
+VACUUM ANALYZE bdot10k_311512.ot_buin_l(zrodlo_danych_geom);
+VACUUM ANALYZE bdot10k_311512.ot_buin_l(kat_istnienia);
+VACUUM ANALYZE bdot10k_311512.ot_buin_l(rodzaj);
+VACUUM ANALYZE bdot10k_311512.ot_buin_l(konstrukcja);
+VACUUM ANALYZE bdot10k_311512.ot_skjz_l(liczba_jezdni_drogi);
+
+
+
+
+CREATE MATERIALIZED VIEW bdot10k_311512.mv_skjz_l AS
+SELECT lokalny_id,
+id_ulic,
+CONCAT_WS(' ', ulica_nazwa_cz1, ulica_nazwa_cz2) as nazwa_ulicy,
+kat_zarzadzania,
+klasa_drogi,
+material_nawierzchni as material,
+szerokosc_nawierzchni as szerokosc,
+liczba_jezdni_drogi as liczba_jezdni,
+kat_istnienia,
+zrodlo_danych_geom as zrodlo_geometrii,
+geom
+FROM bdot10k_311512.ot_skjz_l
+WITH DATA;
+
+CREATE MATERIALIZED VIEW bdot10k_311512.mv_buin_l AS
+SELECT lokalny_id,
+rodzaj,
+konstrukcja,
+szerokosc,
+nosnosc,
+nazwa,
+kat_istnienia,
+zrodlo_danych_geom as zrodlo_geometrii,
+geom
+FROM bdot10k_311512.ot_buin_l
+WITH DATA;
+
+CREATE MATERIALIZED VIEW bdot10k_311512.mv_szlak_drogowy AS
+SELECT id,
+numer_drogi
+FROM bdot10k_311512.ot_szlak_drogowy
+WITH DATA;
+
+CREATE MATERIALIZED VIEW bdot10k_311512.mv_int_jezdnia_szlak AS
+SELECT j.id_ulic as id_ulic,
+CONCAT_WS(' ', j.ulica_nazwa_cz1, j.ulica_nazwa_cz2) as nazwa_ulicy,
+s.numer_drogi as numer_drogi,
+j.kat_zarzadzania as kat_zarzadzania,
+j.klasa_drogi as klasa_drogi,
+j.material_nawierzchni as material,
+j.szerokosc_nawierzchni as szerokosc,
+j.liczba_jezdni_drogi as liczba_jezdni,
+j.kat_istnienia as kat_istnienia,
+j.geom as geom
+FROM bdot10k_311512.ot_skjz_l AS j
+INNER JOIN bdot10k_311512.int_jezdnia_szlak as i ON j.lokalny_id = i.id_jezdni
+INNER JOIN bdot10k_311512.ot_szlak_drogowy as s ON i.id_szlaku = s.id
+WITH DATA;
+
+CREATE UNIQUE INDEX uidx_mv_skjz_lokalny_id ON bdot10k_311512.mv_skjz_l(lokalny_id);
+CREATE INDEX idx_mv_skjz_kat_za ON bdot10k_311512.mv_skjz_l(kat_zarzadzania);
+CREATE INDEX idx_mv_skjz_klasa ON bdot10k_311512.mv_skjz_l(klasa_drogi);
+CREATE INDEX idx_mv_skjz_material ON bdot10k_311512.mv_skjz_l(material);
+CREATE INDEX idx_mv_skjz_jezdni ON bdot10k_311512.mv_skjz_l(liczba_jezdni);
+CREATE INDEX idx_mv_skjz_kat_ist ON bdot10k_311512.mv_skjz_l(kat_istnienia);
+CREATE INDEX idx_mv_skjz_zrodlo ON bdot10k_311512.mv_skjz_l(zrodlo_geometrii);
+CREATE INDEX idx_mv_skjz_geom ON bdot10k_311512.mv_skjz_l USING gist(geom);
+
+CREATE UNIQUE INDEX uidx_mv_buin_lokalny_id ON bdot10k_311512.mv_buin_l(lokalny_id);
+CREATE INDEX idx_mv_buin_rodzaj ON bdot10k_311512.mv_buin_l(rodzaj);
+CREATE INDEX idx_mv_buin_konstrukcja ON bdot10k_311512.mv_buin_l(konstrukcja);
+CREATE INDEX idx_mv_buin_kat_ist ON bdot10k_311512.mv_buin_l(kat_istnienia);
+CREATE INDEX idx_mv_buin_zrodlo ON bdot10k_311512.mv_buin_l(zrodlo_geometrii);
+CREATE INDEX idx_mv_buin_geom ON bdot10k_311512.mv_buin_l USING gist(geom);
+
+CREATE UNIQUE INDEX uidx_mv_szlak_drogowy_id ON bdot10k_311512.mv_szlak_drogowy(id);
+CREATE INDEX idx_mv_szlak_drogowy_numer ON bdot10k_311512.mv_szlak_drogowy(numer_drogi);
+
+CREATE INDEX idx_mv_int_js_kat_za ON bdot10k_311512.mv_int_jezdnia_szlak(kat_zarzadzania);
+CREATE INDEX idx_mv_int_js_klasa ON bdot10k_311512.mv_int_jezdnia_szlak(klasa_drogi);
+CREATE INDEX idx_mv_int_js_material ON bdot10k_311512.mv_int_jezdnia_szlak(material);
+CREATE INDEX idx_mv_int_js_liczba_jezdni ON bdot10k_311512.mv_int_jezdnia_szlak(liczba_jezdni);
+CREATE INDEX idx_mv_int_js_kat_ist ON bdot10k_311512.mv_int_jezdnia_szlak(kat_istnienia);
+CREATE INDEX idx_mv_int_js_geom ON bdot10k_311512.mv_int_jezdnia_szlak USING gist(geom);
+
+VACUUM ANALYZE bdot10k_311512.mv_buin_l;
+REFRESH MATERIALIZED VIEW bdot10k_311512.mv_buin_l;
+VACUUM ANALYZE bdot10k_311512.mv_skjz_l;
+REFRESH MATERIALIZED VIEW bdot10k_311512.mv_skjz_l;
+VACUUM ANALYZE bdot10k_311512.mv_int_jezdnia_szlak;
+REFRESH MATERIALIZED VIEW bdot10k_311512.mv_int_jezdnia_szlak;
+VACUUM ANALYZE bdot10k_311512.mv_szlak_drogowy;
+REFRESH MATERIALIZED VIEW bdot10k_311512.mv_szlak_drogowy;
+
+
+
+
+ALTER TABLE bdot10k_311512.ot_buin_l
+ADD COLUMN x_datazmiany text, 
+ADD COLUMN x_autorzmiany text, 
+ADD COLUMN x_infordodatkowa text;
+
+CREATE OR REPLACE FUNCTION bdot10k_311512.fun_buin_usertime_centroid_coords()
+	RETURNS TRIGGER AS
+	$BODY$
+		BEGIN
+			NEW.x_autorzmiany = current_user;
+			NEW.x_datazmiany = current_timestamp;
+			NEW.x_infordodatkowa = CONCAT(ST_X(ST_CENTROID(NEW.geom)), ' ', ST_Y(ST_CENTROID(NEW.geom)));
+			RETURN NEW;
+		END;
+	$BODY$
+	LANGUAGE plpgsql VOLATILE COST 100;
+
+CREATE TRIGGER trg_buin_usrtime_cntr_coords
+	BEFORE INSERT OR UPDATE
+	ON bdot10k_311512.ot_buin_l
+	FOR EACH ROW
+	EXECUTE PROCEDURE bdot10k_311512.fun_buin_usertime_centroid_coords();
+
+
+
+
+CREATE FUNCTION bdot10k_311512.func_obiekty_drogowe(nr_drogi TEXT)
+RETURNS TEXT AS
+$BODY$
+DECLARE 
+kursor_budowle CURSOR FOR
+SELECT DISTINCT b.lokalny_id, b.rodzaj, b.szerokosc, s.numer_drogi, b.geom
+FROM bdot10k_311512.ot_skjz_l as j LEFT JOIN bdot10k_311512.int_j_s as i ON j.lokalny_id = i.id_jezdni LEFT JOIN bdot10k_311512.ot_szlak_drogowy as s ON s.id = i.id_szlaku, bdot10k_311512.ot_buin_l as b
+WHERE s.numer_drogi = nr_drogi AND b.rodzaj IN ('most', 'tunel') AND ST_Distance(b.geom, j.geom) < 10;
+
+rec RECORD;
+
+BEGIN
+	DROP TABLE IF EXISTS bdot10k_311512.obiekty_drogowe;
+	CREATE TABLE bdot10k_311512.obiekty_drogowe(
+		ID serial PRIMARY KEY,
+		numer text,
+		rodzaj text,
+		geom geometry(POLYGON, 2180)
+	);
+	OPEN kursor_budowle;
+	LOOP
+		FETCH kursor_budowle INTO rec;
+		EXIT WHEN NOT FOUND;
+		INSERT INTO bdot10k_311512.obiekty_drogowe(numer, rodzaj, geom) VALUES
+		(rec.numer_drogi, rec.rodzaj, ST_Buffer(ST_Centroid(rec.geom), rec.szerokosc*100, 'quad_segs=20'));
+	END LOOP;
+	CLOSE kursor_budowle;
+	RETURN 'Success!';
+END;
+$BODY$
+LANGUAGE plpgsql cost 100;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
